@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+:root {
+  /* Midnight palette */
+  --bg-base: #0b0d14;
+  --bg-base-soft: #0f1219;
+  --bg-elevated: rgba(20, 26, 46, 0.85);
+  --bg-card: rgba(26, 33, 56, 0.7);
+  --border-subtle: rgba(148, 163, 184, 0.08);
+  --border-default: rgba(148, 163, 184, 0.14);
+  --border-midnight: rgba(100, 116, 139, 0.2);
+  --text-primary: #e2e8f0;
+  --text-muted: #64748b;
+  --text-soft: #94a3b8;
+  --accent: #7dd3fc;
+  --accent-hover: #bae6fd;
+  --accent-dim: rgba(125, 211, 252, 0.25);
+  --glow-subtle: rgba(125, 211, 252, 0.06);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-feature-settings: "ss01", "ss02";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: 0.01em;
+}
+
+/* Modal enter/exit animations */
+@keyframes modal-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes modal-backdrop-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes modal-panel-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes modal-panel-out {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.96); }
+}
+.modal-backdrop {
+  animation: modal-backdrop-in 0.28s ease-out forwards;
+}
+.modal-backdrop.closing {
+  animation: modal-backdrop-out 0.28s ease-out forwards;
+}
+.modal-panel {
+  animation: modal-panel-in 0.28s ease-out forwards;
+}
+.modal-panel.closing {
+  animation: modal-panel-out 0.28s ease-out forwards;
+}
