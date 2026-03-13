@@ -197,11 +197,7 @@ export function HistoryPage() {
                 aria-expanded={isExpanded}
               >
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3 px-4 py-2 sm:px-5 text-sm min-w-0">
-                  {reAnalyzingId === item.id ? (
-                    <span className="flex-1 min-w-0 h-4 rounded bg-[var(--color-surface-elevated)] animate-pulse" aria-hidden />
-                  ) : (
-                    <span className="font-semibold text-text flex-1 min-w-0 truncate">{displayName}</span>
-                  )}
+                  <span className="font-semibold text-text flex-1 min-w-0 truncate">{displayName}</span>
                   <button
                     type="button"
                     className="min-h-[44px] min-w-[44px] w-10 h-10 rounded-lg border-0 bg-transparent text-muted hover:text-error flex items-center justify-center shrink-0 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
