@@ -1,4 +1,4 @@
-import OpenAI from 'openai';
+import { GoogleGenAI } from '@google/genai';
 
 function parseExtractionResponse(content) {
   if (!content || typeof content !== 'string') return { textBlocks: [], fullText: '' };
@@ -17,33 +17,7 @@ function parseExtractionResponse(content) {
   }
 }
 
-export async function analyzeWithOpenAI(base64Image, mimeType, apiKey) {
-  const openai = new OpenAI({ apiKey });
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    messages: [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: EXTRACTION_PROMPT,
-          },
-          {
-            type: 'image_url',
-            image_url: { url: `data:${mimeType};base64,${base64Image}` },
-          },
-        ],
-      },
-    ],
-    max_tokens: 4096,
-  });
-
-  const content = response.choices?.[0]?.message?.content;
-  return parseExtractionResponse(content);
-}
-
-const EXTRACTION_PROMPT = `You are analyzing an image of labels on small boxes. Your task is to extract ONLY the visible printed text from the labels. Ignore completely: QR codes, barcodes, datamatrix codes, and any other non-text graphics.
+export const DEFAULT_EXTRACTION_PROMPT = `You are analyzing an image of labels on small boxes. Your task is to extract ONLY the visible printed text from the labels. Ignore completely: QR codes, barcodes, datamatrix codes, and any other non-text graphics.
 
 For each distinct text block (a line or group of lines that appear together on a label), provide:
 1. The exact text as it appears, preserving all spaces, line breaks, punctuation, and gaps. Do not correct or normalize the text.
@@ -57,3 +31,29 @@ Respond with a single valid JSON object (no markdown, no code fence) in this exa
 {"textBlocks":[{"text":"exact text here","bbox":[x_min,y_min,x_max,y_max]}],"fullText":"all extracted text with line breaks preserved exactly as in the image"}
 
 Example: {"textBlocks":[{"text":"H 103/21\\n1","bbox":[0.1,0.05,0.4,0.12]}],"fullText":"H 103/21\\n1\\nH 112/21\\n(H) 1\\n..."}`;
+
+/**
+ * @param {Buffer} buffer
+ * @param {string} mimeType
+ * @param {string} apiKey
+ * @param {string} [customPrompt] - if provided, used instead of DEFAULT_EXTRACTION_PROMPT
+ */
+export async function analyzeWithGemini(buffer, mimeType, apiKey, customPrompt) {
+  const ai = new GoogleGenAI({ apiKey });
+  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const base64 = buffer.toString('base64');
+  const promptText =
+    typeof customPrompt === 'string' && customPrompt.trim()
+      ? customPrompt.trim()
+      : DEFAULT_EXTRACTION_PROMPT;
+  const contents = [
+    { inlineData: { mimeType: mimeType || 'image/png', data: base64 } },
+    { text: promptText },
+  ];
+  const response = await ai.models.generateContent({
+    model,
+    contents,
+  });
+  const text = response?.text ?? '';
+  return parseExtractionResponse(text);
+}
