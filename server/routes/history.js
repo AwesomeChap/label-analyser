@@ -12,10 +12,16 @@ historyRouter.get('/', async (req, res) => {
       });
     }
 
-    const { data, error } = await supabase
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 10));
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    const { data, error, count } = await supabase
       .from('label_analyses')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(from, to);
 
     if (error) {
       console.error('History Supabase error:', error);
@@ -25,6 +31,7 @@ historyRouter.get('/', async (req, res) => {
     }
 
     const rows = Array.isArray(data) ? data : [];
+    const total = typeof count === 'number' ? count : rows.length;
     const items = rows.map((row) => {
       let textBlocks = row.text_blocks ?? [];
       if (typeof textBlocks === 'string') {
@@ -46,7 +53,7 @@ historyRouter.get('/', async (req, res) => {
       };
     });
 
-    res.json({ items });
+    res.json({ items, total });
   } catch (err) {
     console.error('History error:', err);
     res.status(500).json({ error: err.message || 'Failed to load history.' });

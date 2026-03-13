@@ -34,8 +34,9 @@ export async function analyzeLabel(imageBase64, prompt, filename) {
   return res.json();
 }
 
-export async function getHistory() {
-  const res = await fetch(`${API_BASE}/api/history`);
+export async function getHistory(page = 1, limit = 10) {
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+  const res = await fetch(`${API_BASE}/api/history?${params}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     const message = err?.error || res.statusText || 'Failed to load history';

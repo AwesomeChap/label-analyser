@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getHistory, deleteLabel, deleteAllLabels, reanalyseLabel } from '../lib/api';
 import { ImageWithBoxes } from '../components/ImageWithBoxes';
 
 const IMAGES_MODAL_DURATION_MS = 200;
+const DEFAULT_PAGE_SIZE = 10;
+const PAGE_SIZE_OPTIONS = [5, 10, 20, 50, 100];
 
 /** Ensure textBlocks is always an array (API/Supabase may return string or null). */
 function normalizeTextBlocks(value) {
@@ -20,6 +22,7 @@ function normalizeTextBlocks(value) {
 
 export function HistoryPage() {
   const [items, setItems] = useState([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
@@ -30,6 +33,10 @@ export function HistoryPage() {
   const [editedPrompt, setEditedPrompt] = useState('');
   const [reAnalyzingId, setReAnalyzingId] = useState(null);
   const [editingPromptId, setEditingPromptId] = useState(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  /** Cache: { [pageSize]: { _total?, [pageNum]: items[] } }. Invalidated on delete. */
+  const pageCacheRef = useRef({});
 
   useEffect(() => {
     const item = items.find((i) => i.id === expandedId);
@@ -40,16 +47,49 @@ export function HistoryPage() {
     if (expandedId !== editingPromptId) setEditingPromptId(null);
   }, [expandedId]);
 
-  const loadHistory = () => {
-    getHistory()
-      .then((res) => setItems(res.items || []))
+  const loadHistory = (pageNum, options = {}) => {
+    const { invalidateCache = false } = options;
+    if (invalidateCache) pageCacheRef.current = {};
+
+    const sizeCache = pageCacheRef.current[pageSize] || {};
+    const cachedItems = sizeCache[pageNum];
+    const cachedTotal = sizeCache._total;
+    if (!invalidateCache && cachedItems !== undefined && typeof cachedTotal === 'number') {
+      setItems(cachedItems);
+      setTotal(cachedTotal);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    getHistory(pageNum, pageSize)
+      .then((res) => {
+        const list = res.items ?? [];
+        const totalCount = typeof res.total === 'number' ? res.total : list.length;
+        if (list.length === 0 && pageNum > 1) {
+          setPage(1);
+          return;
+        }
+        const nextSizeCache = pageCacheRef.current[pageSize] || {};
+        nextSizeCache[pageNum] = list;
+        nextSizeCache._total = totalCount;
+        pageCacheRef.current[pageSize] = nextSizeCache;
+        setItems(list);
+        setTotal(totalCount);
+      })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
-    loadHistory();
-  }, []);
+    loadHistory(page);
+  }, [page, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const showEnd = total > 0 ? start + items.length - 1 : 0;
 
   useEffect(() => {
     if (boxedImageModal.open) {
@@ -74,7 +114,7 @@ export function HistoryPage() {
     setError(null);
     try {
       await reanalyseLabel(item.id, prompt || undefined);
-      await loadHistory();
+      loadHistory(page);
     } catch (err) {
       setError(err.message || 'Re-analysis failed.');
     } finally {
@@ -88,8 +128,8 @@ export function HistoryPage() {
     setDeletingId(id);
     try {
       await deleteLabel(id);
-      setItems((prev) => prev.filter((i) => i.id !== id));
       if (expandedId === id) setExpandedId(null);
+      loadHistory(page, { invalidateCache: true });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -102,7 +142,10 @@ export function HistoryPage() {
     setDeletingId('all');
     try {
       await deleteAllLabels();
+      pageCacheRef.current = {};
       setItems([]);
+      setTotal(0);
+      setPage(1);
       setExpandedId(null);
     } catch (err) {
       setError(err.message);
@@ -114,8 +157,8 @@ export function HistoryPage() {
   if (loading) {
     return (
       <div className="w-full max-w-3xl mx-auto">
-        <header className="mb-8">
-          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-text mb-2">
+        <header className="mb-6 sm:mb-8">
+          <h1 className="text-xl sm:text-3xl font-semibold tracking-tight text-text mb-2">
             History
           </h1>
           <p className="text-muted text-sm leading-relaxed">
@@ -130,8 +173,8 @@ export function HistoryPage() {
   if (error) {
     return (
       <div className="w-full max-w-3xl mx-auto">
-        <header className="mb-10">
-          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-text mb-2">
+        <header className="mb-6 sm:mb-8">
+          <h1 className="text-xl sm:text-3xl font-semibold tracking-tight text-text mb-2">
             History
           </h1>
         </header>
@@ -154,10 +197,10 @@ export function HistoryPage() {
               Past analyses. Click a row to expand and see extracted text and image with boxes.
             </p>
           </div>
-          {items.length > 0 && (
+          {total > 0 && (
             <button
               type="button"
-              className="min-h-[44px] px-4 py-2.5 rounded-xl text-sm font-medium text-muted bg-[var(--color-surface-elevated)] border border-[var(--color-border-subtle)] hover:text-error transition-colors disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
+              className="h-8 px-3 py-1.5 rounded-lg text-xs font-medium text-muted bg-[var(--color-surface-elevated)] border border-[var(--color-border-subtle)] hover:text-error transition-colors disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
               onClick={handleDeleteAll}
               disabled={!!deletingId}
             >
@@ -167,13 +210,14 @@ export function HistoryPage() {
         </div>
       </header>
 
-      {items.length === 0 ? (
+      {total === 0 ? (
         <div className="card p-6 sm:p-8 text-center">
           <p className="text-muted text-sm m-0">No analyses yet.</p>
           <p className="text-muted text-xs mt-1 m-0">Analyse labels on the Analyse page to see them here.</p>
         </div>
       ) : (
-        <ul className="list-none p-0 m-0 flex flex-col gap-3">
+        <>
+        <ul className="list-none p-0 m-0 flex flex-col gap-2">
           {items.map((item) => {
             const isExpanded = expandedId === item.id;
             const displayName = item.name?.trim() || 'Unnamed';
@@ -196,20 +240,20 @@ export function HistoryPage() {
                 }}
                 aria-expanded={isExpanded}
               >
-                <div className="flex flex-wrap items-center gap-2 sm:gap-3 px-4 py-2 sm:px-5 text-sm min-w-0">
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 text-xs min-w-0">
                   <span className="font-semibold text-text flex-1 min-w-0 truncate">{displayName}</span>
                   <button
                     type="button"
-                    className="min-h-[44px] min-w-[44px] w-10 h-10 rounded-lg border-0 bg-transparent text-muted hover:text-error flex items-center justify-center shrink-0 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="w-8 h-8 min-w-[2rem] min-h-[2rem] rounded-md border-0 bg-transparent text-muted hover:text-error flex items-center justify-center shrink-0 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                     onClick={(e) => handleDeleteOne(e, item.id)}
                     disabled={!!deletingId || reAnalyzingId === item.id}
                     title="Delete"
                     aria-label="Delete this analysis"
                   >
                     {deletingId === item.id ? (
-                      <span className="text-sm">…</span>
+                      <span className="text-xs">…</span>
                     ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                         <polyline points="3 6 5 6 21 6" />
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                         <line x1="10" y1="11" x2="10" y2="17" />
@@ -218,7 +262,7 @@ export function HistoryPage() {
                     )}
                   </button>
                   <span
-                    className={`text-muted/70 text-[0.6rem] shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+                    className={`text-muted/70 text-[0.55rem] shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
                     aria-hidden
                   >
                     ▼
@@ -435,11 +479,74 @@ export function HistoryPage() {
             );
           })}
         </ul>
+
+        {total > 0 && (
+          <nav className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-border-subtle)] pt-4" aria-label="Pagination">
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-muted text-xs m-0">
+                Showing {start}–{showEnd} of {total}
+              </p>
+              <span className="h-4 w-px bg-[var(--color-border-subtle)] self-center" aria-hidden />
+              <label className="flex items-center gap-1.5 text-muted text-xs">
+                <span>Per page</span>
+                <span className="relative inline-block">
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      if (PAGE_SIZE_OPTIONS.includes(val)) {
+                        setPageSize(val);
+                        setPage(1);
+                      }
+                    }}
+                    className="h-8 min-w-[3.25rem] pl-2 pr-7 py-1 rounded-lg text-xs font-medium bg-[var(--color-surface-elevated)] border border-[var(--color-border-subtle)] text-text hover:border-muted/30 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent/50 cursor-pointer appearance-none"
+                    aria-label="Entries per page"
+                  >
+                    {PAGE_SIZE_OPTIONS.map((n) => (
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
+                  <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-muted" aria-hidden>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
+                  </span>
+                </span>
+              </label>
+            </div>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  className="h-8 px-2.5 py-1 rounded-lg text-xs font-medium text-muted bg-[var(--color-surface-elevated)] border border-[var(--color-border-subtle)] hover:text-text hover:border-muted/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => p - 1)}
+                  aria-label="Previous page"
+                >
+                  Previous
+                </button>
+                <span className="text-xs text-muted px-1.5" aria-live="polite">
+                  Page {page} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  className="h-8 px-2.5 py-1 rounded-lg text-xs font-medium text-muted bg-[var(--color-surface-elevated)] border border-[var(--color-border-subtle)] hover:text-text hover:border-muted/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                  aria-label="Next page"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </nav>
+        )}
+        </>
       )}
 
       {boxedImageModal.open && (
         <div
-className={`fixed inset-0 overlay z-50 flex items-center justify-center p-3 sm:p-4 transition-all duration-200 ease-out ${
+          className={`fixed inset-0 overlay z-50 flex items-center justify-center p-3 sm:p-4 transition-all duration-200 ease-out ${
           imagesModalMounted && !imagesModalClosing ? 'opacity-100 backdrop-blur-sm' : 'opacity-0 backdrop-blur-none'
         } ${imagesModalClosing ? 'pointer-events-none' : ''}`}
         onClick={closeBoxedImageModal}

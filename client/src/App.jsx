@@ -9,7 +9,7 @@ function ThemeToggle({ theme, onToggle }) {
     <button
       type="button"
       onClick={onToggle}
-      className="min-h-[44px] min-w-[44px] h-10 w-10 rounded-md flex items-center justify-center text-muted hover:text-text transition-colors shrink-0"
+      className="h-8 w-8 rounded-md flex items-center justify-center text-muted hover:text-text transition-colors shrink-0"
       aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
       title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
     >
@@ -34,7 +34,7 @@ function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-bg transition-colors duration-200">
-      <header className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-2 sm:gap-3 px-4 py-3 sm:px-6 sm:py-4 border-b border-[var(--color-border-subtle)] bg-bg/80 backdrop-blur-xl pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] sm:pl-[max(1rem,env(safe-area-inset-left))] sm:pr-[max(1rem,env(safe-area-inset-right))]">
+      <header className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-2 sm:gap-3 px-4 py-2 sm:px-6 sm:py-2.5 border-b border-[var(--color-border-subtle)] bg-bg/80 backdrop-blur-sm pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] sm:pl-[max(1rem,env(safe-area-inset-left))] sm:pr-[max(1rem,env(safe-area-inset-right))]">
         <Link to="/" className="flex items-center gap-2.5 text-base sm:text-xl font-semibold tracking-tight text-text hover:no-underline shrink-0 min-w-0">
           <span className="w-1 sm:w-1.5 h-4 sm:h-5 bg-accent shrink-0" aria-hidden />
           <span className="truncate">Label Analyser</span>
@@ -42,13 +42,13 @@ function App() {
         <nav className="flex items-center gap-1 rounded-lg p-1 bg-bg shrink-0">
           <Link
             to="/"
-            className={`rounded-md px-3 py-2.5 text-sm font-medium min-h-[44px] min-w-[44px] inline-flex items-center justify-center transition-colors ${isAnalyze ? 'text-accent' : 'text-muted hover:text-text'}`}
+            className={`rounded-md px-3 py-1.5 text-sm font-medium h-8 inline-flex items-center justify-center min-w-[2.5rem] transition-colors ${isAnalyze ? 'text-accent' : 'text-muted hover:text-text'}`}
           >
             Analyse
           </Link>
           <Link
             to="/history"
-            className={`rounded-md px-3 py-2.5 text-sm font-medium min-h-[44px] min-w-[44px] inline-flex items-center justify-center transition-colors ${!isAnalyze ? 'text-accent' : 'text-muted hover:text-text'}`}
+            className={`rounded-md px-3 py-1.5 text-sm font-medium h-8 inline-flex items-center justify-center min-w-[2.5rem] transition-colors ${!isAnalyze ? 'text-accent' : 'text-muted hover:text-text'}`}
           >
             History
           </Link>

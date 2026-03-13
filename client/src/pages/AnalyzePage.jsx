@@ -88,7 +88,6 @@ export function AnalyzePage() {
     setBatchImageModalMounted(false);
   }, [batchImageModal.open]);
 
-
   useEffect(() => {
     if (showPromptEditor) {
       if (!promptText && defaultPrompt) setPromptText(defaultPrompt);
@@ -280,10 +279,8 @@ export function AnalyzePage() {
       </header>
 
       <section className="card p-4 sm:p-6 mb-6">
-        <h2 className="text-xs font-medium uppercase tracking-wider text-muted mb-4">Upload</h2>
-
-        <div className="mb-2">
-          <span className="text-xs font-medium text-muted">Single image</span>
+        <div className="mb-3">
+          <span className="text-sm tracking-wide uppercase text-muted">Single Image</span>
         </div>
         <div
           className={`relative aspect-[4/3] rounded-xl overflow-hidden flex items-center justify-center transition-all duration-200 mb-4 ${
@@ -315,7 +312,7 @@ export function AnalyzePage() {
               {!loading && (
                 <button
                   type="button"
-                  className="absolute top-2.5 right-2.5 w-9 h-9 rounded-full bg-bg/90 text-text hover:text-error flex items-center justify-center transition-colors backdrop-blur-sm border border-[var(--color-border-subtle)]"
+                  className="absolute top-2 right-2 w-8 h-8 rounded-full bg-bg/90 text-text hover:text-error flex items-center justify-center transition-colors backdrop-blur-sm border border-[var(--color-border-subtle)]"
                   onClick={clearSingle}
                   aria-label="Remove"
                 >
@@ -348,14 +345,14 @@ export function AnalyzePage() {
           />
           <button
             type="button"
-            className="flex-1 min-h-[44px] px-4 py-2.5 rounded-xl text-sm font-medium text-text bg-[var(--color-surface-elevated)] border border-[var(--color-border-subtle)] hover:border-muted/30 transition-colors"
+            className="flex-1 h-8 px-3 py-1.5 rounded-lg text-xs font-medium text-text bg-[var(--color-surface-elevated)] border border-[var(--color-border-subtle)] hover:border-muted/30 transition-colors"
             onClick={() => singleInputRef.current?.click()}
           >
             Upload
           </button>
           <button
             type="button"
-            className="flex-1 min-h-[44px] px-4 py-2.5 rounded-xl text-sm font-medium text-text bg-[var(--color-surface-elevated)] border border-[var(--color-border-subtle)] hover:border-muted/30 transition-colors"
+            className="flex-1 h-8 px-3 py-1.5 rounded-lg text-xs font-medium text-text bg-[var(--color-surface-elevated)] border border-[var(--color-border-subtle)] hover:border-muted/30 transition-colors"
             onClick={() => {
               if (!navigator.mediaDevices?.getUserMedia) {
                 setError('Camera not supported in this browser.');
@@ -370,9 +367,9 @@ export function AnalyzePage() {
         </div>
 
         <div className="pt-6 border-t border-[var(--color-border-subtle)]">
-          <span className="text-xs font-medium uppercase tracking-wider text-muted/80 block mb-3">Multiple images</span>
+          <span className="text-sm tracking-wide uppercase text-muted block mb-3">Multiple Images</span>
           <p className="text-muted text-sm mb-3 leading-relaxed">
-            Folder or multiple files (sorted by filename). Each image is analysed and saved to history.
+            Folder or multiple images (sorted by filename). Each image is analysed and saved to history.
           </p>
           <div className="flex flex-wrap gap-2">
             <input
@@ -395,17 +392,17 @@ export function AnalyzePage() {
             />
             <button
               type="button"
-              className="px-4 py-2.5 rounded-xl text-sm font-medium text-text bg-[var(--color-surface-elevated)] border border-[var(--color-border-subtle)] hover:border-muted/30 transition-colors"
+              className="h-8 px-2.5 py-1.5 rounded-lg text-xs font-medium text-text bg-[var(--color-surface-elevated)] border border-[var(--color-border-subtle)] hover:border-muted/30 transition-colors"
               onClick={() => folderInputRef.current?.click()}
             >
               Choose folder
             </button>
             <button
               type="button"
-              className="px-4 py-2.5 rounded-xl text-sm font-medium text-text bg-[var(--color-surface-elevated)] border border-[var(--color-border-subtle)] hover:border-muted/30 transition-colors"
+              className="h-8 px-2.5 py-1.5 rounded-lg text-xs font-medium text-text bg-[var(--color-surface-elevated)] border border-[var(--color-border-subtle)] hover:border-muted/30 transition-colors"
               onClick={() => batchInputRef.current?.click()}
             >
-              Choose files
+              Choose images
             </button>
           </div>
           {batchFiles.length > 0 && (
@@ -448,14 +445,14 @@ export function AnalyzePage() {
                     {!isAnalysing && (
                       <button
                         type="button"
-                        className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-bg/90 text-muted hover:text-error flex items-center justify-center transition-colors border border-[var(--color-border-subtle)]"
+                        className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-bg/90 text-muted hover:text-error flex items-center justify-center transition-colors border border-[var(--color-border-subtle)]"
                         onClick={(e) => {
                           e.stopPropagation();
                           removeBatchFile(i);
                         }}
                         aria-label={`Remove ${entry.file.name}`}
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                           <path d="M18 6L6 18M6 6l12 12" />
                         </svg>
                       </button>
@@ -487,14 +484,14 @@ export function AnalyzePage() {
         <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3">
           <button
             type="button"
-            className="min-h-[44px] px-4 py-2.5 rounded-xl border border-accent/40 bg-accent/10 text-accent font-medium text-sm hover:bg-accent/20 hover:border-accent/60 transition-colors"
+            className="h-8 px-3 py-1.5 rounded-lg border border-accent/40 bg-accent/10 text-accent font-medium text-xs hover:bg-accent/20 hover:border-accent/60 transition-colors"
             onClick={() => setShowPromptEditor(true)}
           >
             Edit extraction prompt
           </button>
           <button
             type="button"
-            className="min-h-[44px] px-4 py-2.5 rounded-xl bg-accent text-bg font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:enabled:bg-accent-dim transition-colors shadow-lg shadow-accent/20"
+            className="h-8 px-3 py-1.5 rounded-lg bg-accent text-bg font-semibold text-xs disabled:opacity-40 disabled:cursor-not-allowed hover:enabled:bg-accent-dim transition-colors shadow-lg shadow-accent/20"
             disabled={!canRunAnyAnalyse || isAnalysing}
             onClick={() => {
               if (isAnalysing) return;
@@ -543,14 +540,14 @@ export function AnalyzePage() {
             <div className="flex flex-wrap gap-2 mt-4">
               <button
                 type="button"
-                className="px-4 py-2 text-sm rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-elevated)] text-muted hover:text-text transition-colors"
+                className="h-8 px-2.5 py-1 rounded-lg text-xs font-medium border border-[var(--color-border-subtle)] bg-[var(--color-surface-elevated)] text-muted hover:text-text transition-colors"
                 onClick={() => setPromptText(defaultPrompt)}
               >
                 Reset to default
               </button>
               <button
                 type="button"
-                className="px-4 py-2 text-sm rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-elevated)] text-muted hover:text-text transition-colors"
+                className="h-8 px-2.5 py-1 rounded-lg text-xs font-medium border border-[var(--color-border-subtle)] bg-[var(--color-surface-elevated)] text-muted hover:text-text transition-colors"
                 onClick={closePromptModal}
               >
                 Close
@@ -597,7 +594,7 @@ export function AnalyzePage() {
               )}
             </div>
           </div>
-          <p className="mt-5 pt-4 border-t border-[var(--color-border-subtle)] text-success text-sm">
+          <p className="mt-6 pt-4 border-t border-[var(--color-border-subtle)] text-success text-sm">
             Saved to history. View it on the History page.
           </p>
         </section>
@@ -632,7 +629,7 @@ export function AnalyzePage() {
               )}
               <button
                 type="button"
-                className="absolute top-3 right-3 z-10 w-9 h-9 rounded-lg overlay-btn flex items-center justify-center border border-[var(--color-border-subtle)] hover:!text-error transition-colors"
+                className="absolute top-2 right-2 z-10 w-8 h-8 rounded-lg overlay-btn flex items-center justify-center border border-[var(--color-border-subtle)] hover:!text-error transition-colors"
                 onClick={closeBoxedImageModal}
                 aria-label="Close"
               >
@@ -673,7 +670,7 @@ export function AnalyzePage() {
               )}
               <button
                 type="button"
-                className="absolute top-3 right-3 z-10 w-9 h-9 rounded-lg overlay-btn flex items-center justify-center border border-[var(--color-border-subtle)] hover:!text-error transition-colors"
+                className="absolute top-2 right-2 z-10 w-8 h-8 rounded-lg overlay-btn flex items-center justify-center border border-[var(--color-border-subtle)] hover:!text-error transition-colors"
                 onClick={closeBatchImageModal}
                 aria-label="Close"
               >
@@ -685,6 +682,7 @@ export function AnalyzePage() {
           </div>
         </div>
       )}
+
     </div>
   );
 }
