@@ -5,6 +5,17 @@ import { ImageWithBoxes } from '../components/ImageWithBoxes';
 const IMAGES_MODAL_DURATION_MS = 200;
 const DEFAULT_PAGE_SIZE = 10;
 const PAGE_SIZE_OPTIONS = [5, 10, 20, 50, 100];
+const PAGE_SIZE_STORAGE_KEY = 'labelAnalyser_history_pageSize';
+
+function getStoredPageSize() {
+  try {
+    const stored = localStorage.getItem(PAGE_SIZE_STORAGE_KEY);
+    const n = stored != null ? parseInt(stored, 10) : NaN;
+    return PAGE_SIZE_OPTIONS.includes(n) ? n : DEFAULT_PAGE_SIZE;
+  } catch {
+    return DEFAULT_PAGE_SIZE;
+  }
+}
 
 /** Ensure textBlocks is always an array (API/Supabase may return string or null). */
 function normalizeTextBlocks(value) {
@@ -34,7 +45,7 @@ export function HistoryPage() {
   const [reAnalyzingId, setReAnalyzingId] = useState(null);
   const [editingPromptId, setEditingPromptId] = useState(null);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [pageSize, setPageSize] = useState(getStoredPageSize);
   /** Cache: { [pageSize]: { _total?, [pageNum]: items[] } }. Invalidated on delete. */
   const pageCacheRef = useRef({});
 
@@ -497,6 +508,9 @@ export function HistoryPage() {
                       if (PAGE_SIZE_OPTIONS.includes(val)) {
                         setPageSize(val);
                         setPage(1);
+                        try {
+                          localStorage.setItem(PAGE_SIZE_STORAGE_KEY, String(val));
+                        } catch {}
                       }
                     }}
                     className="h-8 min-w-[3.25rem] pl-2 pr-7 py-1 rounded-lg text-xs font-medium bg-[var(--color-surface-elevated)] border border-[var(--color-border-subtle)] text-text hover:border-muted/30 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent/50 cursor-pointer appearance-none"

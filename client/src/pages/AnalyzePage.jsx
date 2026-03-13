@@ -228,6 +228,9 @@ export function AnalyzePage() {
       const base64 = await compressAndToBase64(singleImage.file);
       const data = await analyzeLabel(base64, promptText, singleImage.file.name);
       setResult(data);
+      if (singleImage?.url) URL.revokeObjectURL(singleImage.url);
+      setSingleImage(null);
+      if (singleInputRef.current) singleInputRef.current.value = '';
     } catch (err) {
       setError(err.message || 'Analysis failed.');
     } finally {
