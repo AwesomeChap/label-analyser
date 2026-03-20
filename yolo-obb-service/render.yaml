@@ -1,0 +1,14 @@
+# Render Blueprint: YOLO OBB service
+# Deploy: connect this repo in Render and use "New Blueprint" or create a Web Service manually.
+services:
+  - type: web
+    runtime: python
+    name: yolo-obb-service
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: YOLO_OBB_WEIGHTS
+        value: best.pt
+      - key: YOLO_OBB_CONF
+        value: "0.25"
+    # Optional: add YOLO_OBB_CLASS_NAMES in the Render dashboard if you use a class filter

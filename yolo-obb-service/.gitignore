@@ -1,0 +1,23 @@
+# Virtual env and Python
+.venv
+venv
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.mypy_cache
+
+# Env and secrets
+.env
+.env.*
+!.env.example
+
+# Training outputs (large; optional: commit runs/obb/weights/best.pt if you want it in repo)
+runs/
+
+# Datasets (usually too large for git; use Git LFS or host elsewhere if needed)
+my_dataset/
+my_dataset_rotated/
+
+# Optional: uncomment to ignore all .pt weights (use default yolov8n-obb.pt on deploy)
+# *.pt

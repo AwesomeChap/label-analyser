@@ -1,0 +1,46 @@
+services:
+  - type: web
+    runtime: python
+    name: yolo-obb-service
+    rootDir: yolo-obb-service
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: YOLO_OBB_WEIGHTS
+        value: best.pt
+      - key: YOLO_OBB_CONF
+        value: "0.25"
+
+  - type: web
+    runtime: node
+    name: label-analyser-api
+    rootDir: web-app/server
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "10000"
+      - key: ANALYZE_PIPELINE
+        value: yolo-obb
+      - key: YOLO_OBB_SERVICE_URL
+        sync: false
+      - key: GOOGLE_GEMINI_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_BUCKET_NAME
+        sync: false
+
+  - type: web
+    runtime: static
+    name: label-analyser-web
+    rootDir: web-app/client
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        sync: false
