@@ -1,0 +1,10 @@
+.git
+**/.git
+**/.DS_Store
+**/node_modules
+**/.venv
+**/__pycache__
+**/*.pyc
+yolo-obb-service/runs
+yolo-obb-service/my_dataset
+yolo-obb-service/my_dataset_rotated
