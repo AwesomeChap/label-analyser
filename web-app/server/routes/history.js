@@ -15,7 +15,7 @@ historyRouter.get('/', async (req, res) => {
     }
 
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 10));
+    const limit = Math.min(120, Math.max(1, parseInt(req.query.limit, 10) || 12));
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
