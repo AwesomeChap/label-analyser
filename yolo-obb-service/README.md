@@ -31,10 +31,24 @@ Optional env (defaults shown):
 | `YOLO_OBB_MAX_DET` | Max detections per image (default `40`) |
 | `YOLO_OBB_CLASS_NAMES` | Comma list, e.g. `label` — only those classes; empty = all |
 
-Run:
+Run (must use the **venv** so `ultralytics` is on `PYTHONPATH` — global `uvicorn` will fail with `No module named 'ultralytics'`):
 
 ```bash
-uvicorn main:app --host 127.0.0.1 --port 8766
+./run.sh
+```
+
+Or explicitly:
+
+```bash
+.venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8766
+```
+
+**Why Docker works but bare terminal doesn’t:** the image runs `pip install -r requirements.txt`. Locally you need the same install inside `.venv` (see Setup above). If you see `No module named 'ultralytics'`, recreate the venv and reinstall:
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+./run.sh
 ```
 
 ## App wiring

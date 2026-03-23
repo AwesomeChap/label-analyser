@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { getHistory, deleteLabel, deleteAllLabels, reanalyseLabel } from '../lib/api';
-import { ImageWithBoxes } from '../components/ImageWithBoxes';
+import { ImageWithBoxes, IMAGE_WITH_BOXES_IMG_FULLSCREEN } from '../components/ImageWithBoxes';
 
 const IMAGES_MODAL_DURATION_MS = 200;
 const DEFAULT_PAGE_SIZE = 12;
@@ -15,6 +15,55 @@ function getStoredPageSize() {
   } catch {
     return DEFAULT_PAGE_SIZE;
   }
+}
+
+function HistoryLabelPreview({ imageUrl, textBlocks, onImageClick, variant = 'modal' }) {
+  const isModal = variant === 'modal';
+
+  if (isModal) {
+    return (
+      <div
+        className="rounded-xl overflow-hidden border border-[var(--color-border-subtle)] h-60 w-full bg-[var(--color-surface-elevated)] flex flex-col p-1 min-h-0"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex-1 min-h-0 w-full min-w-0 relative">
+          <ImageWithBoxes
+            fillContainer
+            imageUrl={imageUrl}
+            textBlocks={textBlocks}
+            className="h-full w-full"
+            imgClassName=""
+            buttonClassName={
+              onImageClick
+                ? 'h-full w-full min-h-0 min-w-0 !p-0 bg-transparent'
+                : 'h-full w-full min-h-0 min-w-0 !p-0'
+            }
+            onClick={onImageClick}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative h-36 w-full bg-[var(--color-surface-elevated)] border-b border-[var(--color-border-subtle)] flex flex-col p-1 min-h-0 overflow-hidden">
+      <div className="flex-1 min-h-0 w-full min-w-0 relative">
+        <ImageWithBoxes
+          fillContainer
+          imageUrl={imageUrl}
+          textBlocks={textBlocks}
+          className="h-full w-full"
+          imgClassName=""
+          buttonClassName={
+            onImageClick
+              ? 'h-full w-full min-h-0 min-w-0 !p-0 bg-transparent'
+              : 'h-full w-full min-h-0 min-w-0 !p-0'
+          }
+          onClick={onImageClick}
+        />
+      </div>
+    </div>
+  );
 }
 
 /** Ensure textBlocks is always an array (API/Supabase may return string or null). */
@@ -48,6 +97,9 @@ export function HistoryPage() {
   const [pageSize, setPageSize] = useState(getStoredPageSize);
   const [viewMode, setViewMode] = useState('thumbnail'); // 'list' | 'thumbnail'
   const [detailsModalItemId, setDetailsModalItemId] = useState(null);
+  const [detailsModalClosing, setDetailsModalClosing] = useState(false);
+  const [detailsModalMounted, setDetailsModalMounted] = useState(false);
+  const detailsCloseTimeoutRef = useRef(null);
   /** Cache: { [pageSize]: { _total?, [pageNum]: items[] } }. Invalidated on delete. */
   const pageCacheRef = useRef({});
 
@@ -112,6 +164,25 @@ export function HistoryPage() {
     setImagesModalMounted(false);
   }, [boxedImageModal.open]);
 
+  useEffect(() => {
+    if (detailsModalItemId && !detailsModalClosing) {
+      const t = requestAnimationFrame(() => setDetailsModalMounted(true));
+      return () => cancelAnimationFrame(t);
+    }
+    setDetailsModalMounted(false);
+  }, [detailsModalItemId, detailsModalClosing]);
+
+  const openDetailsModal = (item) => {
+    if (detailsCloseTimeoutRef.current) {
+      clearTimeout(detailsCloseTimeoutRef.current);
+      detailsCloseTimeoutRef.current = null;
+    }
+    setDetailsModalClosing(false);
+    setDetailsModalItemId(item.id);
+    setEditedPrompt(item.extractionPrompt ?? '');
+    setEditingPromptId(null);
+  };
+
   const closeBoxedImageModal = () => {
     setImagesModalClosing(true);
     setTimeout(() => {
@@ -120,10 +191,52 @@ export function HistoryPage() {
     }, IMAGES_MODAL_DURATION_MS);
   };
 
-  const closeDetailsModal = () => {
+  const closeDetailsModalImmediate = () => {
+    if (detailsCloseTimeoutRef.current) {
+      clearTimeout(detailsCloseTimeoutRef.current);
+      detailsCloseTimeoutRef.current = null;
+    }
     setDetailsModalItemId(null);
+    setDetailsModalClosing(false);
+    setDetailsModalMounted(false);
     setEditingPromptId(null);
   };
+
+  const closeDetailsModal = () => {
+    setDetailsModalClosing(true);
+    setDetailsModalMounted(false);
+    detailsCloseTimeoutRef.current = setTimeout(() => {
+      setDetailsModalItemId(null);
+      setDetailsModalClosing(false);
+      setEditingPromptId(null);
+      detailsCloseTimeoutRef.current = null;
+    }, IMAGES_MODAL_DURATION_MS);
+  };
+
+  /** Close if the open item is not on the current page (e.g. pagination). */
+  useEffect(() => {
+    if (!detailsModalItemId) return;
+    if (!items.some((i) => i.id === detailsModalItemId)) {
+      if (detailsCloseTimeoutRef.current) {
+        clearTimeout(detailsCloseTimeoutRef.current);
+        detailsCloseTimeoutRef.current = null;
+      }
+      setDetailsModalItemId(null);
+      setDetailsModalClosing(false);
+      setDetailsModalMounted(false);
+      setEditingPromptId(null);
+    }
+  }, [items, detailsModalItemId]);
+
+  useEffect(
+    () => () => {
+      if (detailsCloseTimeoutRef.current) {
+        clearTimeout(detailsCloseTimeoutRef.current);
+        detailsCloseTimeoutRef.current = null;
+      }
+    },
+    [],
+  );
 
   const handleReAnalyze = async (e, item) => {
     e.stopPropagation();
@@ -147,7 +260,7 @@ export function HistoryPage() {
     try {
       await deleteLabel(id);
       if (expandedId === id) setExpandedId(null);
-      if (detailsModalItemId === id) closeDetailsModal();
+      if (detailsModalItemId === id) closeDetailsModalImmediate();
       loadHistory(page, { invalidateCache: true });
     } catch (err) {
       setError(err.message);
@@ -166,7 +279,7 @@ export function HistoryPage() {
       setTotal(0);
       setPage(1);
       setExpandedId(null);
-      closeDetailsModal();
+      closeDetailsModalImmediate();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -322,19 +435,12 @@ export function HistoryPage() {
                 <p className="text-xs text-muted/90 uppercase tracking-wider font-medium mb-2">Image with bounding boxes</p>
                 {item.imageUrl ? (
                   <>
-                    <div
-                      className="rounded-xl overflow-hidden border border-[var(--color-border-subtle)] h-60 w-full"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <ImageWithBoxes
-                        imageUrl={item.imageUrl}
-                        textBlocks={normalizeTextBlocks(item.textBlocks)}
-                        className="block w-full h-full"
-                        imgClassName="w-full h-full object-cover"
-                        buttonClassName="h-full"
-                        onClick={(url, blocks) => setBoxedImageModal({ open: true, imageUrl: url, textBlocks: blocks })}
-                      />
-                    </div>
+                    <HistoryLabelPreview
+                      imageUrl={item.imageUrl}
+                      textBlocks={normalizeTextBlocks(item.textBlocks)}
+                      variant="modal"
+                      onImageClick={(url, blocks) => setBoxedImageModal({ open: true, imageUrl: url, textBlocks: blocks })}
+                    />
                     <p className="text-muted text-[0.7rem] mt-1">Click image to view full size</p>
                     {(item.obbDetectionCount != null || item.obbFallback === true) && (
                       <p className="text-muted text-[0.7rem] mt-1" role="status">
@@ -430,17 +536,12 @@ export function HistoryPage() {
   return (
     <div className="w-full max-w-3xl mx-auto min-w-0">
       <header className="mb-6 sm:mb-8">
-        <div className="flex flex-wrap items-start justify-between gap-3 sm:gap-4">
-          <div className="min-w-0 flex-1">
-            <h1 className="text-xl sm:text-3xl font-semibold tracking-tight text-text mb-2">
-              History
-            </h1>
-            <p className="text-muted text-sm leading-relaxed">
-              Past analyses. Thumbnails show the image with bounding boxes; click to open details. Switch to list for row expand.
-            </p>
-          </div>
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="text-xl sm:text-3xl font-semibold tracking-tight text-text">
+            History
+          </h1>
           {total > 0 && (
-            <div className="flex items-center gap-2 shrink-0 ml-auto">
+            <div className="flex items-center gap-2 shrink-0">
               <div
                 className="inline-flex h-9 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-elevated)] overflow-hidden"
                 role="group"
@@ -504,6 +605,9 @@ export function HistoryPage() {
             </div>
           )}
         </div>
+        <p className="text-muted text-sm leading-relaxed mt-2">
+          Past analyses. Thumbnails show the image with bounding boxes; click to open details. Switch to list for row expand.
+        </p>
       </header>
 
       {total === 0 ? (
@@ -569,39 +673,53 @@ export function HistoryPage() {
             })}
           </ul>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
             {items.map((item) => {
               const displayName = item.name?.trim() || 'Unnamed';
               return (
                 <article
                   key={item.id}
-                  className="card overflow-hidden border border-[var(--color-border-subtle)] hover:border-muted/30 transition-colors"
+                  className="card overflow-hidden border border-[var(--color-border-subtle)] hover:border-muted/30 transition-colors relative"
                 >
                   <button
                     type="button"
                     className="block w-full text-left"
-                    onClick={() => {
-                      setDetailsModalItemId(item.id);
-                      setEditedPrompt(item.extractionPrompt ?? '');
-                      setEditingPromptId(null);
-                    }}
+                    onClick={() => openDetailsModal(item)}
                     aria-label={`Open ${displayName}`}
                   >
-                    <div className="h-36 w-full bg-[var(--color-surface-elevated)] overflow-hidden flex items-center justify-center">
-                      {item.imageUrl ? (
-                        <ImageWithBoxes
-                          imageUrl={item.imageUrl}
-                          textBlocks={normalizeTextBlocks(item.textBlocks)}
-                          className="!block w-full h-full max-w-none"
-                          imgClassName="w-full h-full min-h-36 object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-muted text-xs">No image</div>
-                      )}
-                    </div>
+                    {item.imageUrl ? (
+                      <HistoryLabelPreview
+                        imageUrl={item.imageUrl}
+                        textBlocks={normalizeTextBlocks(item.textBlocks)}
+                        variant="thumbnail"
+                      />
+                    ) : (
+                      <div className="flex h-36 items-center justify-center text-muted text-xs bg-[var(--color-surface-elevated)] border-b border-[var(--color-border-subtle)]">
+                        No image
+                      </div>
+                    )}
                     <div className="px-3 py-2">
                       <p className="text-xs font-semibold text-text truncate m-0">{displayName}</p>
                     </div>
+                  </button>
+                  <button
+                    type="button"
+                    className="absolute top-1.5 right-1.5 z-10 w-8 h-8 min-w-[2rem] min-h-[2rem] rounded-md overlay-btn text-muted hover:text-error flex items-center justify-center shrink-0 transition-colors shadow-sm border border-[var(--color-border-subtle)] disabled:opacity-60 disabled:cursor-not-allowed"
+                    onClick={(e) => handleDeleteOne(e, item.id)}
+                    disabled={!!deletingId || reAnalyzingId === item.id}
+                    title="Delete"
+                    aria-label={`Delete ${displayName}`}
+                  >
+                    {deletingId === item.id ? (
+                      <span className="text-xs">…</span>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        <line x1="10" y1="11" x2="10" y2="17" />
+                        <line x1="14" y1="11" x2="14" y2="17" />
+                      </svg>
+                    )}
                   </button>
                 </article>
               );
@@ -698,7 +816,7 @@ className={`flex flex-col max-w-4xl w-full max-h-[calc(100dvh-1.5rem)] overflow-
               imageUrl={boxedImageModal.imageUrl}
               textBlocks={normalizeTextBlocks(boxedImageModal.textBlocks)}
               className="max-w-full"
-              imgClassName="max-h-[85dvh] w-auto object-contain"
+              imgClassName={IMAGE_WITH_BOXES_IMG_FULLSCREEN}
             />
               ) : (
                 <p className="text-muted text-sm p-6">No image.</p>
@@ -717,20 +835,26 @@ className={`flex flex-col max-w-4xl w-full max-h-[calc(100dvh-1.5rem)] overflow-
           </div>
         </div>
       )}
-      {detailsModalItem && (
+      {detailsModalItemId && (
         <div
-          className="fixed inset-0 overlay z-40 flex items-center justify-center p-3 sm:p-4 backdrop-blur-sm transition-[backdrop-filter] duration-200"
+          className={`fixed inset-0 overlay z-40 flex items-center justify-center p-3 sm:p-4 transition-all duration-200 ease-out ${
+            detailsModalMounted && !detailsModalClosing ? 'opacity-100 backdrop-blur-sm' : 'opacity-0 backdrop-blur-none'
+          } ${detailsModalClosing ? 'pointer-events-none' : ''}`}
           onClick={closeDetailsModal}
           role="dialog"
           aria-modal="true"
           aria-label="History details"
         >
           <div
-            className="card w-full max-w-4xl max-h-[calc(100dvh-1.5rem)] overflow-auto"
+            className={`card w-full max-w-4xl max-h-[calc(100dvh-1.5rem)] overflow-auto transition-all duration-200 ease-out ${
+              detailsModalMounted && !detailsModalClosing ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
+            }`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="sticky top-0 z-10 px-4 py-3 border-b border-[var(--color-border-subtle)] bg-surface flex items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-text m-0 truncate">{detailsModalItem.name?.trim() || 'Unnamed'}</p>
+              <p className="text-sm font-semibold text-text m-0 truncate">
+                {detailsModalItem?.name?.trim() || 'Unnamed'}
+              </p>
               <button
                 type="button"
                 className="w-8 h-8 rounded-lg overlay-btn flex items-center justify-center border border-[var(--color-border-subtle)] hover:!text-error transition-colors"
@@ -742,7 +866,11 @@ className={`flex flex-col max-w-4xl w-full max-h-[calc(100dvh-1.5rem)] overflow-
                 </svg>
               </button>
             </div>
-            {renderDetails(detailsModalItem, { inModal: true })}
+            {detailsModalItem ? (
+              renderDetails(detailsModalItem, { inModal: true })
+            ) : (
+              <p className="text-muted text-sm px-4 py-6 m-0">This analysis is not on the current page.</p>
+            )}
           </div>
         </div>
       )}

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { analyzeLabel, getDefaultPrompt } from '../lib/api';
 import { compressAndToBase64 } from '../lib/compress';
 import { CameraCapture } from '../components/CameraCapture';
-import { ImageWithBoxes } from '../components/ImageWithBoxes';
+import { ImageWithBoxes, IMAGE_WITH_BOXES_IMG_FULLSCREEN } from '../components/ImageWithBoxes';
 import { useAnalyzeState } from '../contexts/AnalyzeStateContext';
 
 const MODAL_DURATION_MS = 200;
@@ -587,15 +587,21 @@ export function AnalyzePage() {
               <p className="text-xs text-muted/90 uppercase tracking-wider font-medium mb-2">Image with bounding boxes</p>
               {(result.imageUrl || singleImage?.url) ? (
                 <>
-                  <div className="rounded-xl overflow-hidden border border-[var(--color-border-subtle)] h-60 w-full" onClick={(e) => e.stopPropagation()}>
-                    <ImageWithBoxes
-                      imageUrl={result.imageUrl || singleImage?.url}
-                      textBlocks={normalizeTextBlocks(result.textBlocks)}
-                      className="block w-full h-full"
-                      imgClassName="w-full h-full object-cover"
-                      buttonClassName="h-full"
-                      onClick={(url, blocks) => setBoxedImageModal({ open: true, imageUrl: url, textBlocks: blocks })}
-                    />
+                  <div
+                    className="rounded-xl overflow-hidden border border-[var(--color-border-subtle)] h-60 w-full bg-[var(--color-surface-elevated)] flex flex-col p-1 min-h-0"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex-1 min-h-0 w-full min-w-0 relative">
+                      <ImageWithBoxes
+                        fillContainer
+                        imageUrl={result.imageUrl || singleImage?.url}
+                        textBlocks={normalizeTextBlocks(result.textBlocks)}
+                        className="h-full w-full"
+                        imgClassName=""
+                        buttonClassName="h-full w-full min-h-0 min-w-0 !p-0 bg-transparent"
+                        onClick={(url, blocks) => setBoxedImageModal({ open: true, imageUrl: url, textBlocks: blocks })}
+                      />
+                    </div>
                   </div>
                   <p className="text-muted text-[0.7rem] mt-1">Click image to view full size</p>
                 </>
@@ -632,7 +638,7 @@ export function AnalyzePage() {
                   imageUrl={boxedImageModal.imageUrl}
                   textBlocks={normalizeTextBlocks(boxedImageModal.textBlocks)}
                   className="max-w-full"
-                  imgClassName="max-h-[85dvh] w-auto object-contain"
+                  imgClassName={IMAGE_WITH_BOXES_IMG_FULLSCREEN}
                 />
               ) : (
                 <p className="text-muted text-sm p-6">No image.</p>

@@ -1,17 +1,98 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
 
-export function ImageWithBoxes({ imageUrl, textBlocks, className = '', imgClassName = '', buttonClassName = '', onClick }) {
-  const [dimensions, setDimensions] = useState(null);
+/**
+ * Image classes for common layouts. Overlays use object-fit math, so cover/contain both align.
+ */
+export const IMAGE_WITH_BOXES_IMG_FULLSCREEN = 'max-h-[85dvh] w-auto max-w-full object-contain';
+/** Intrinsic / shrink-wrap layout inside a padded flex row (thumbnails). */
+export const IMAGE_WITH_BOXES_IMG_DETAILS = 'max-h-full max-w-full w-auto object-contain';
+export const IMAGE_WITH_BOXES_IMG_THUMB = 'max-h-full max-w-full w-auto object-contain';
+
+/** Where the bitmap is drawn inside the img element’s CSS box (for object-fit contain/cover/fill). */
+function getFittedImageRect(containerW, containerH, naturalW, naturalH, objectFit) {
+  if (!naturalW || !naturalH || !containerW || !containerH) {
+    return { x: 0, y: 0, w: containerW, h: containerH };
+  }
+  const ir = naturalW / naturalH;
+  const cr = containerW / containerH;
+
+  if (objectFit === 'cover') {
+    let w;
+    let h;
+    if (cr > ir) {
+      w = containerW;
+      h = w / ir;
+    } else {
+      h = containerH;
+      w = h * ir;
+    }
+    return { x: (containerW - w) / 2, y: (containerH - h) / 2, w, h };
+  }
+
+  if (objectFit === 'contain') {
+    let w;
+    let h;
+    if (cr > ir) {
+      h = containerH;
+      w = h * ir;
+    } else {
+      w = containerW;
+      h = w / ir;
+    }
+    return { x: (containerW - w) / 2, y: (containerH - h) / 2, w, h };
+  }
+
+  // fill, none, scale-down, etc. — stretch / full box
+  return { x: 0, y: 0, w: containerW, h: containerH };
+}
+
+export function ImageWithBoxes({
+  imageUrl,
+  textBlocks,
+  className = '',
+  imgClassName = '',
+  buttonClassName = '',
+  onClick,
+  /** Fill parent (h-full w-full): image is inset-0 + object-contain so bitmap is centered; overlay math unchanged. */
+  fillContainer = false,
+}) {
+  const [layout, setLayout] = useState(null);
   const imgRef = useRef(null);
 
   const hasImage = imageUrl && typeof imageUrl === 'string' && imageUrl.trim() !== '';
 
-  const onLoad = () => {
-    if (imgRef.current) {
-      const { naturalWidth, naturalHeight, offsetWidth, offsetHeight } = imgRef.current;
-      setDimensions({ w: offsetWidth, h: offsetHeight, nw: naturalWidth, nh: naturalHeight });
-    }
-  };
+  const measure = useCallback(() => {
+    const el = imgRef.current;
+    if (!el || !el.naturalWidth || !el.naturalHeight) return;
+    const cw = el.offsetWidth;
+    const ch = el.offsetHeight;
+    const nw = el.naturalWidth;
+    const nh = el.naturalHeight;
+    const fitMode = (typeof getComputedStyle === 'function' && getComputedStyle(el).objectFit) || 'fill';
+    const rect = getFittedImageRect(cw, ch, nw, nh, fitMode);
+    setLayout({
+      nw,
+      nh,
+      ox: rect.x,
+      oy: rect.y,
+      ow: rect.w,
+      oh: rect.h,
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    setLayout(null);
+    const id = requestAnimationFrame(() => measure());
+    return () => cancelAnimationFrame(id);
+  }, [imageUrl, measure]);
+
+  useEffect(() => {
+    const el = imgRef.current;
+    if (!el || !hasImage) return;
+    const ro = new ResizeObserver(() => measure());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [hasImage, imageUrl, measure]);
 
   function normalizeBbox(bbox, naturalWidth, naturalHeight) {
     if (!Array.isArray(bbox) || bbox.length !== 4) return null;
@@ -51,10 +132,10 @@ export function ImageWithBoxes({ imageUrl, textBlocks, className = '', imgClassN
 
   const blocks = Array.isArray(textBlocks) ? textBlocks : [];
   const validBlocks =
-    dimensions && blocks.length > 0
+    layout && blocks.length > 0
       ? blocks
           .map((b) => {
-            const bbox = normalizeBbox(b.bbox, dimensions.nw, dimensions.nh);
+            const bbox = normalizeBbox(b.bbox, layout.nw, layout.nh);
             const polygon =
               Array.isArray(b.polygon) && b.polygon.length >= 3
                 ? b.polygon
@@ -70,19 +151,34 @@ export function ImageWithBoxes({ imageUrl, textBlocks, className = '', imgClassN
     return <span className={`text-muted text-sm ${className}`}>No image</span>;
   }
 
+  const imgClasses = fillContainer
+    ? `absolute inset-0 block h-full w-full object-contain object-center ${imgClassName}`.trim()
+    : imgClassName.trim()
+      ? `block ${imgClassName}`.trim()
+      : 'block max-w-full h-auto w-full';
+
+  const rootClass = fillContainer
+    ? `relative h-full w-full min-h-0 min-w-0 overflow-hidden ${className}`.trim()
+    : `relative inline-block max-w-full min-h-0 align-middle ${className}`.trim();
+
   const content = (
-    <div className={`relative inline-block max-w-full ${className}`}>
+    <div className={rootClass}>
       <img
         ref={imgRef}
         src={imageUrl}
         alt="Label"
-        className={`max-w-full h-auto block ${imgClassName}`}
-        onLoad={onLoad}
+        className={imgClasses}
+        onLoad={measure}
       />
-      {dimensions && validBlocks.length > 0 && (
+      {layout && validBlocks.length > 0 && (
         <div
-          className="absolute left-0 top-0 pointer-events-none"
-          style={{ width: dimensions.w, height: dimensions.h }}
+          className="absolute pointer-events-none z-[1]"
+          style={{
+            left: layout.ox,
+            top: layout.oy,
+            width: layout.ow,
+            height: layout.oh,
+          }}
         >
           {validBlocks.map((block, i) => {
             if (block.polygon && block.polygon.length >= 3) {
@@ -125,10 +221,13 @@ export function ImageWithBoxes({ imageUrl, textBlocks, className = '', imgClassN
   );
 
   if (onClick) {
+    const btnLayout = fillContainer
+      ? 'block h-full w-full min-h-0 min-w-0'
+      : 'flex w-full justify-center items-center';
     return (
       <button
         type="button"
-        className={`block w-full text-left rounded-xl overflow-hidden border border-transparent hover:border-accent/30 focus:outline-none focus:ring-2 focus:ring-accent/50 transition-colors cursor-pointer ${buttonClassName}`.trim()}
+        className={`${btnLayout} rounded-xl overflow-hidden border border-transparent hover:border-accent/30 focus:outline-none focus:ring-2 focus:ring-accent/50 transition-colors cursor-pointer ${buttonClassName}`.trim()}
         onClick={() => onClick(imageUrl, validBlocks.length ? blocks : [])}
       >
         {content}
