@@ -3,8 +3,8 @@ set -eu
 
 export PATH="/opt/venv/bin:$PATH"
 
-# Default to local YOLO service inside the same container.
-export YOLO_OBB_SERVICE_URL="${YOLO_OBB_SERVICE_URL:-http://127.0.0.1:8766}"
+# Monolith: always talk to YOLO inside this container (ignore stale Render env).
+export YOLO_OBB_SERVICE_URL="http://127.0.0.1:8766"
 export YOLO_OBB_WEIGHTS="${YOLO_OBB_WEIGHTS:-best.pt}"
 export ANALYZE_PIPELINE="${ANALYZE_PIPELINE:-yolo-obb}"
 export SERVE_CLIENT_BUILD="true"

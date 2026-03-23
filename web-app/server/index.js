@@ -19,6 +19,31 @@ app.use('/api/history', historyRouter);
 
 app.get('/api/health', (_, res) => res.json({ ok: true }));
 
+/** Debug OBB wiring (safe for logs; no secrets). */
+app.get('/api/health/obb', async (_, res) => {
+  const pipeline = (process.env.ANALYZE_PIPELINE || '').toLowerCase();
+  const base = (process.env.YOLO_OBB_SERVICE_URL || 'http://127.0.0.1:8766').replace(
+    /\/$/,
+    '',
+  );
+  const out = {
+    analyzePipeline: pipeline || null,
+    yoloObbServiceUrl: base,
+    yoloReachable: false,
+    yoloHealth: null,
+    yoloError: null,
+  };
+  try {
+    const r = await fetch(`${base}/health`, { signal: AbortSignal.timeout(8000) });
+    out.yoloReachable = r.ok;
+    out.yoloHealth = await r.json().catch(() => null);
+    if (!r.ok) out.yoloError = `HTTP ${r.status}`;
+  } catch (e) {
+    out.yoloError = e instanceof Error ? e.message : String(e);
+  }
+  res.status(out.yoloReachable ? 200 : 503).json(out);
+});
+
 // In production monolith deploys, serve the built frontend from Express.
 if (process.env.SERVE_CLIENT_BUILD === 'true') {
   app.use(express.static(clientDist));
