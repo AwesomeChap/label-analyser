@@ -9,7 +9,9 @@ This service runs **YOLOv8-OBB** (rotated boxes), returns each detection as a **
 | **`yolov8n-obb.pt`** (default, auto-download) | Trained on **DOTA** (aerial): planes, ships, vehicles, etc. **Not** small lab labels — you will usually get **no boxes** on label photos, and the app will **fall back to full-image Gemini**. |
 | **Your `best.pt`** after training | One class e.g. `label` on **your** images → oriented boxes around each sticker. **This is what you want** for better OBB on your trays. |
 
-**Step-by-step training guide:** see **[TRAINING.md](TRAINING.md)** in this folder (annotate → dataset layout → `yolo obb train` → plug in `best.pt`).
+**Step-by-step training guide:** see **[TRAINING.md](TRAINING.md)** in this folder (annotate → dataset layout → `yolo obb train` → **`best.pt`**).
+
+**Weights file:** keep **`yolo-obb-service/best.pt`** as the one your service loads (`YOLO_OBB_WEIGHTS=best.pt`). After training, **`./train.sh`** copies the newest `runs/**/weights/best.pt` there automatically; or run **`./sync-best-weights.sh`** anytime.
 
 Official docs: [Ultralytics OBB](https://docs.ultralytics.com/tasks/obb/).
 

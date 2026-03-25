@@ -1,6 +1,7 @@
 """
 YOLO OBB inference + warped crops for downstream OCR (Gemini in Node).
-Weights: set YOLO_OBB_WEIGHTS to a .pt path, or default yolov8n-obb.pt (DOTA pretrained).
+Weights: YOLO_OBB_WEIGHTS (.pt). If unset/empty and ./best.pt exists next to this file, that is used;
+otherwise yolov8n-obb.pt (DOTA pretrained).
 """
 import base64
 import logging
@@ -18,7 +19,50 @@ from pydantic import BaseModel
 app = FastAPI(title="YOLO OBB")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-WEIGHTS = os.environ.get("YOLO_OBB_WEIGHTS", "yolov8n-obb.pt")
+
+def _resolve_weights(path: str) -> str:
+    """Resolve relative .pt paths: same dir as this file (yolo-obb-service/), repo parent, then cwd."""
+    if not path:
+        return "yolov8n-obb.pt"
+    if os.path.isabs(path) and os.path.isfile(path):
+        return path
+    if os.path.isfile(path):
+        return os.path.abspath(path)
+    here = os.path.dirname(os.path.abspath(__file__))
+    for p in (
+        os.path.join(here, path),
+        os.path.join(os.path.dirname(here), path),
+        os.path.join(os.getcwd(), path),
+    ):
+        if os.path.isfile(p):
+            return os.path.abspath(p)
+    return path
+
+
+def _initial_weights_spec() -> tuple[str, bool]:
+    """Return (spec path, implicit_default). If env unset/empty, prefer ./best.pt when present."""
+    v = os.environ.get("YOLO_OBB_WEIGHTS")
+    if v is not None and str(v).strip() != "":
+        return str(v).strip(), False
+    here = os.path.dirname(os.path.abspath(__file__))
+    if os.path.isfile(os.path.join(here, "best.pt")):
+        return "best.pt", True
+    return "yolov8n-obb.pt", True
+
+
+_raw_weights, _weights_implicit = _initial_weights_spec()
+WEIGHTS = _resolve_weights(_raw_weights)
+if WEIGHTS != _raw_weights:
+    os.environ["YOLO_OBB_WEIGHTS"] = WEIGHTS
+    logger.info("Resolved YOLO_OBB_WEIGHTS %r -> %s", _raw_weights, WEIGHTS)
+elif _weights_implicit:
+    os.environ["YOLO_OBB_WEIGHTS"] = WEIGHTS
+    logger.info(
+        "YOLO_OBB_WEIGHTS unset; using default weights %r -> %s",
+        _raw_weights,
+        WEIGHTS,
+    )
+
 CONF = float(os.environ.get("YOLO_OBB_CONF", "0.25"))
 MAX_DET = int(os.environ.get("YOLO_OBB_MAX_DET", "40"))
 CLASS_FILTER = os.environ.get("YOLO_OBB_CLASS_NAMES", "").strip()  # comma-separated, empty = all
@@ -87,10 +131,16 @@ def run_detect_and_crops(img_bgr: np.ndarray):
         conf=CONF,
         max_det=MAX_DET,
         verbose=False,
+        task="obb",
     )
     r = results[0]
     items = []
     if r.obb is None or len(r.obb) == 0:
+        logger.info(
+            "OBB predict: 0 boxes above conf=%s (weights=%s); if unexpected, check YOLO_OBB_WEIGHTS and YOLO_OBB_CONF",
+            CONF,
+            WEIGHTS,
+        )
         return items
 
     # r.names can be dict {0: "label"} or list ["label"]
@@ -115,9 +165,12 @@ def run_detect_and_crops(img_bgr: np.ndarray):
     if clss.ndim == 0:
         clss = np.array([clss])
 
+    filtered_class = 0
+    warp_failed = 0
     for i in range(len(xyxyxyxy)):
         cname = names.get(int(clss[i]), str(int(clss[i])))
         if allowed is not None and cname.lower() not in allowed:
+            filtered_class += 1
             continue
         quad = xyxyxyxy[i]
         poly_norm = []
@@ -127,6 +180,7 @@ def run_detect_and_crops(img_bgr: np.ndarray):
             )
         crop = warp_obb_crop(img_bgr, quad)
         if crop is None or crop.size == 0:
+            warp_failed += 1
             continue
         crop_b64 = base64.b64encode(encode_jpeg(crop)).decode("ascii")
         items.append(
@@ -139,6 +193,24 @@ def run_detect_and_crops(img_bgr: np.ndarray):
         )
     # Sort by confidence descending
     items.sort(key=lambda x: -x["confidence"])
+
+    n_raw = len(xyxyxyxy)
+    if not items and n_raw > 0:
+        seen = sorted({names.get(int(clss[i]), str(int(clss[i]))) for i in range(n_raw)})
+        if filtered_class == n_raw and allowed is not None:
+            logger.warning(
+                "All %d OBB detections dropped by YOLO_OBB_CLASS_NAMES=%r (model class names: %s). "
+                "Unset YOLO_OBB_CLASS_NAMES or list exact names.",
+                n_raw,
+                CLASS_FILTER,
+                seen,
+            )
+        elif warp_failed > 0:
+            logger.warning(
+                "OBB: %d detections from model, %d failed crop/warp, returning 0 items.",
+                n_raw,
+                warp_failed,
+            )
     return items
 
 
@@ -172,15 +244,7 @@ def health():
 
 @app.on_event("startup")
 def warmup():
-    global WEIGHTS
     try:
-        if not os.path.isabs(WEIGHTS) and not os.path.isfile(WEIGHTS):
-            # If path is relative and missing, try parent (training often runs from repo root)
-            parent_path = os.path.join(os.path.dirname(__file__), "..", WEIGHTS)
-            if os.path.isfile(parent_path):
-                WEIGHTS = os.path.abspath(parent_path)
-                os.environ["YOLO_OBB_WEIGHTS"] = WEIGHTS
-                logger.info("Using weights from repo root: %s", WEIGHTS)
         get_model()
         logger.info("Model loaded: %s", WEIGHTS)
     except Exception as e:

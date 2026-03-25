@@ -12,8 +12,8 @@ If you run the Node app on a VPS or single server:
 
 ```bash
 cd yolo-obb-service
-# Use the venv and your trained weights
-export YOLO_OBB_WEIGHTS=runs/obb/weights/best.pt
+# Trained weights: keep a single ./best.pt (same as Docker/Render). After training, run ./sync-best-weights.sh or rely on ./train.sh to copy the newest runs/**/weights/best.pt.
+export YOLO_OBB_WEIGHTS=best.pt
 export YOLO_OBB_CONF=0.25
 # Bind to 0.0.0.0 so it’s reachable; use a process manager (systemd, supervisor) or reverse proxy
 .venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8766

@@ -11,4 +11,13 @@ fi
 DATA="${1:-my_dataset_rotated/data.yaml}"
 shift
 # Force runs to be saved in yolo-obb-service/runs (project=..., name=obb)
+set +e
 .venv/bin/yolo obb train data="$DATA" model=yolov8n-obb.pt epochs=100 imgsz=640 batch=8 project="$ROOT/runs" name=obb "$@"
+rc=$?
+set -e
+if [ "$rc" -eq 0 ]; then
+  echo ""
+  echo "Promoting weights to ./best.pt (YOLO_OBB_WEIGHTS=best.pt locally / in Docker)..."
+  .venv/bin/python "$ROOT/sync_best_weights.py" || exit $?
+fi
+exit "$rc"

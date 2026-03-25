@@ -161,22 +161,37 @@ Check that boxes land on labels. If many misses, add more varied images and retr
 
 ## 7. Plug into Label Analyser
 
-1. Copy **`best.pt`** somewhere stable, e.g. `yolo-obb-service/models/label-obb.pt`.
-2. When starting the OBB service:
+Keep a **single canonical weights file** next to the service: `yolo-obb-service/best.pt`. Local runs and Docker/Render use **`YOLO_OBB_WEIGHTS=best.pt`** (no path under `runs/`).
 
-   ```bash
-   export YOLO_OBB_WEIGHTS=/full/path/to/label-obb.pt
-   # optional: only that class
-   export YOLO_OBB_CLASS_NAMES=label
-   uvicorn main:app --host 127.0.0.1 --port 8766
-   ```
+### After training (no manual copy)
 
-3. In the **web app’s** server env (e.g. `server/.env`):
+- **`./train.sh`** already runs training, then **promotes** the newest `runs/**/weights/best.pt` to **`./best.pt`** when training exits successfully.
+- Any time, run **`./sync-best-weights.sh`** to copy the newest run’s `best.pt` to **`./best.pt`**, or pass an explicit file:
 
-   ```env
-   ANALYZE_PIPELINE=yolo-obb
-   YOLO_OBB_SERVICE_URL=http://127.0.0.1:8766
-   ```
+  ```bash
+  cd yolo-obb-service
+  ./sync-best-weights.sh
+  ./sync-best-weights.sh runs/obb/weights/best.pt   # optional explicit path
+  ./sync-best-weights.sh --dry-run                   # show what would be copied
+  ```
+
+### Start the OBB service
+
+```bash
+cd yolo-obb-service
+# default loads best.pt if present, else yolov8n-obb.pt — set explicitly if you want:
+export YOLO_OBB_WEIGHTS=best.pt
+# optional: only that class
+export YOLO_OBB_CLASS_NAMES=label
+./run.sh
+```
+
+In the **web app’s** server env (e.g. `server/.env`):
+
+```env
+ANALYZE_PIPELINE=yolo-obb
+YOLO_OBB_SERVICE_URL=http://127.0.0.1:8766
+```
 
 Restart the web app’s Node server. New analyses will use **your** oriented boxes + Gemini on each crop.
 
@@ -196,13 +211,30 @@ Restart the web app’s Node server. New analyses will use **your** oriented box
 
 ## Quick horizontal / rotated data (no re-annotation)
 
-If you only have upright annotated images and want detections on **horizontal** or rotated layouts, you can **synthesize** rotated copies: rotate each image 90° / 180° / 270° and transform the OBB corners the same way. No CVAT or Roboflow needed.
+### Spiral / circular trays (labels at many angles in one photo)
+
+If the model detects well on one side of the tray but misses the same stickers when they face another direction (e.g. horizontal vs vertical along a spiral), the usual cause is **too few examples at each absolute orientation** in the training set. You do **not** need new labels: rotate **whole images** (and OBB corners) so every cassette appears at **four** orientations across copies of the same shot.
+
+From `yolo-obb-service`:
+
+```bash
+.venv/bin/python rotate_dataset.py my_dataset --out my_dataset_rotated
+./train.sh my_dataset_rotated/data.yaml epochs=120
+```
+
+That turns 51 originals into **51 × 4 = 204** training pairs (plus val). Optionally add small random rotation at train time: `./train.sh my_dataset_rotated/data.yaml epochs=120 degrees=15` (see Ultralytics `yolo obb train` docs for `degrees`).
+
+### Upright-only annotations
+
+If you only have upright annotated images and want detections on **sideways** layouts, synthesize rotated copies the same way:
 
 From `yolo-obb-service`:
 
 ```bash
 .venv/bin/python rotate_dataset.py my_dataset --out my_dataset_rotated
 ```
+
+**Note:** `rotate_dataset.py` maps labels using the same geometry as `cv2.rotate` (per-image width/height). If you ever see shifted boxes on `*_rot90` images, delete the old rotated output folder and run the script again (older versions used an incorrect normalized shortcut).
 
 This creates `my_dataset_rotated/` with:
 - All original images + labels (copied)
@@ -223,7 +255,7 @@ Optional: only add 90° (horizontal from upright): `--angles 90`.
    ```bash
    .venv/bin/python check_rotated_labels.py my_dataset_rotated/images/train/SOME_rot90.jpg
    ```
-   Open `SOME_rot90_with_boxes.jpg` and confirm the green boxes sit on the cassettes. If they’re wrong, the rotation script or paths are off.
+   Open `images/train/checked/SOME_rot90_with_boxes.jpg` and confirm the green boxes sit on the cassettes. If they’re wrong, the rotation script or paths are off.
 
 2. **Lower inference confidence**  
    At runtime the OBB service may be filtering out low-confidence detections. Restart the service with a lower threshold:
