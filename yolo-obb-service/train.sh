@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Train OBB and save runs/ inside yolo-obb-service (not project root).
 # Usage: ./train.sh [data.yaml] [extra yolo args...]
+#
+# Large synthetic rotation sets (--step 15 → ~24× images): use more epochs and/or
+# train-time jitter, e.g.  ./train.sh data.yaml epochs=200 degrees=10
+# (Ultralytics default degrees=0 in logs — without jitter, discrete rotations alone may underfit.)
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
 if [ ! -d ".venv" ]; then
