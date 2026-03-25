@@ -213,7 +213,7 @@ Restart the web app’s Node server. New analyses will use **your** oriented box
 
 ### Spiral / circular trays (labels at many angles in one photo)
 
-If the model detects well on one side of the tray but misses the same stickers when they face another direction (e.g. horizontal vs vertical along a spiral), the usual cause is **too few examples at each absolute orientation** in the training set. You do **not** need new labels: rotate **whole images** (and OBB corners) so every cassette appears at **four** orientations across copies of the same shot.
+If the model detects well on one side of the tray but misses the same stickers when they face another direction (e.g. horizontal vs vertical along a spiral), the usual cause is **too few examples at each absolute orientation** in the training set. You do **not** need new labels: rotate **whole images** (and OBB corners) so every cassette appears at **many** absolute orientations across copies of the same shot.
 
 From `yolo-obb-service`:
 
@@ -222,7 +222,7 @@ From `yolo-obb-service`:
 ./train.sh my_dataset_rotated/data.yaml epochs=120
 ```
 
-That turns 51 originals into **51 × 4 = 204** training pairs (plus val). Optionally add small random rotation at train time: `./train.sh my_dataset_rotated/data.yaml epochs=120 degrees=15` (see Ultralytics `yolo obb train` docs for `degrees`).
+By default the script uses **`--step 30`**: it keeps each original and adds rotations at **30°, 60°, …, 330°** clockwise (expanded canvas, labels use the same affine as the image). That turns 51 originals into **51 × 12 = 612** training pairs per split (plus val). For the old **four-way** set (original + 90° / 180° / 270° only), run `--step 90`. Optionally add small random rotation at train time: `./train.sh my_dataset_rotated/data.yaml epochs=120 degrees=15` (see Ultralytics `yolo obb train` docs for `degrees`).
 
 ### Upright-only annotations
 
@@ -234,11 +234,11 @@ From `yolo-obb-service`:
 .venv/bin/python rotate_dataset.py my_dataset --out my_dataset_rotated
 ```
 
-**Note:** `rotate_dataset.py` maps labels using the same geometry as `cv2.rotate` (per-image width/height). If you ever see shifted boxes on `*_rot90` images, delete the old rotated output folder and run the script again (older versions used an incorrect normalized shortcut).
+**Note:** Non-90° rotations use a **larger** image (black padding) so nothing is cropped; normalized OBB corners are transformed with the same 2×3 affine as `warpAffine`. If boxes look shifted, delete the output folder and regenerate with the current script.
 
 This creates `my_dataset_rotated/` with:
 - All original images + labels (copied)
-- For each image, three extra files: `..._rot90`, `..._rot180`, `..._rot270` (image + label with corners transformed)
+- For each image, extra files `..._rot30`, `..._rot60`, …, `..._rot330` by default (image + label with corners transformed)
 
 Then train (from `yolo-obb-service` so `runs/` is saved here):
 
@@ -246,16 +246,16 @@ Then train (from `yolo-obb-service` so `runs/` is saved here):
 ./train.sh my_dataset_rotated/data.yaml
 ```
 
-Optional: only add 90° (horizontal from upright): `--angles 90`.
+Optional: legacy cardinal-only copies: `--step 90`. Single extra angle: `--angles 90`.
 
 **If the model still doesn’t detect horizontal / rotated in real photos:**
 
 1. **Check that rotated labels are correct**  
    Draw boxes on a rotated image and open the result:
    ```bash
-   .venv/bin/python check_rotated_labels.py my_dataset_rotated/images/train/SOME_rot90.jpg
+   .venv/bin/python check_rotated_labels.py my_dataset_rotated/images/train/SOME_rot30.jpg
    ```
-   Open `images/train/checked/SOME_rot90_with_boxes.jpg` and confirm the green boxes sit on the cassettes. If they’re wrong, the rotation script or paths are off.
+   Open `images/train/checked/SOME_rot30_with_boxes.jpg` and confirm the green boxes sit on the cassettes. If they’re wrong, the rotation script or paths are off.
 
 2. **Lower inference confidence**  
    At runtime the OBB service may be filtering out low-confidence detections. Restart the service with a lower threshold:

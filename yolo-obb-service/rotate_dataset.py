@@ -1,63 +1,81 @@
 #!/usr/bin/env python3
 """
-Create rotated copies of your existing OBB dataset (90°, 180°, 270°) so you get
-horizontal / sideways layouts without re-annotating. Annotations are transformed
-automatically.
+Create rotated copies of your existing OBB dataset so you get many absolute
+orientations without re-annotating. Annotations are transformed with the same
+affine as the image (expanded canvas so nothing is cropped).
 
 Usage:
   .venv/bin/python rotate_dataset.py my_dataset --out my_dataset_rotated
-  .venv/bin/python rotate_dataset.py my_dataset --out my_dataset_rotated --angles 90 270
+      # default: --step 30 → originals plus _rot30 … _rot330 (12 variants per image)
 
-Original images + labels are copied; then for each image we add rotated versions
-with _rot90, _rot180, _rot270 in the filename. Use the output folder for training.
+  .venv/bin/python rotate_dataset.py my_dataset --out my_dataset_rotated --step 90
+      # same as legacy: _rot90, _rot180, _rot270 (4 variants per image)
 
-Corner transforms follow the same pixel mapping as cv2.rotate (width/height aware),
-not the simplified (y, 1-x) normalized shortcut, so overlays align on the rotated images.
-If you generated a rotated dataset with an older version of this script, regenerate it.
+  .venv/bin/python rotate_dataset.py my_dataset --out my_dataset_rotated --angles 45 90
+
+Original images + labels are copied; rotated copies use _rot<DEG> in the filename.
+Angles are degrees clockwise (same sense as the old _rot90 = 90° clockwise).
 """
 import argparse
+import math
 import shutil
 from pathlib import Path
 
 import cv2
-
-# Normalized OBB corners must match cv2.rotate pixel mapping (not the continuous (y,1-x) shortcut).
-ALLOWED_ANGLES = frozenset({90, 180, 270})
+import numpy as np
 
 
-def norm_xy_after_rotate_90_cw(nx: float, ny: float, w: int, h: int) -> tuple[float, float]:
-    """Same as cv2.rotate(img, ROTATE_90_CLOCKWISE); original size w×h → rotated h×w."""
-    x_old, y_old = nx * w, ny * h
-    x_new = h - 1 - y_old
-    y_new = x_old
-    w_new, h_new = h, w
-    return x_new / w_new, y_new / h_new
+def rotate_expand_clockwise(
+    img: np.ndarray, angle_deg_clockwise: float
+) -> tuple[np.ndarray, np.ndarray, int, int, int, int]:
+    """
+    Rotate clockwise around image center; expand canvas so no pixels are cropped.
+    OpenCV's getRotationMatrix2D uses CCW-positive, so we pass -angle for clockwise.
+    Returns warped BGR image, 2x3 affine M, new_w, new_h, orig_w, orig_h.
+    """
+    h, w = img.shape[:2]
+    center = (w / 2.0, h / 2.0)
+    M = cv2.getRotationMatrix2D(center, -float(angle_deg_clockwise), 1.0)
+    rad = math.radians(angle_deg_clockwise)
+    c = abs(math.cos(rad))
+    s = abs(math.sin(rad))
+    new_w = int(math.ceil(h * s + w * c))
+    new_h = int(math.ceil(h * c + w * s))
+    M[0, 2] += (new_w / 2.0) - center[0]
+    M[1, 2] += (new_h / 2.0) - center[1]
+    out = cv2.warpAffine(
+        img,
+        M,
+        (new_w, new_h),
+        flags=cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=(0, 0, 0),
+    )
+    return out, M, new_w, new_h, w, h
 
 
-def norm_xy_after_rotate_180(nx: float, ny: float, w: int, h: int) -> tuple[float, float]:
-    x_old, y_old = nx * w, ny * h
-    x_new = w - 1 - x_old
-    y_new = h - 1 - y_old
-    return x_new / w, y_new / h
-
-
-def norm_xy_after_rotate_90_ccw(nx: float, ny: float, w: int, h: int) -> tuple[float, float]:
-    """Same as cv2.rotate(img, ROTATE_90_COUNTERCLOCKWISE); script uses this for angle=270."""
-    x_old, y_old = nx * w, ny * h
-    x_new = y_old
-    y_new = w - 1 - x_old
-    w_new, h_new = h, w
-    return x_new / w_new, y_new / h_new
-
-
-def transform_norm_xy(nx: float, ny: float, angle: int, w: int, h: int) -> tuple[float, float]:
-    if angle == 90:
-        return norm_xy_after_rotate_90_cw(nx, ny, w, h)
-    if angle == 180:
-        return norm_xy_after_rotate_180(nx, ny, w, h)
-    if angle == 270:
-        return norm_xy_after_rotate_90_ccw(nx, ny, w, h)
-    raise ValueError(angle)
+def transform_norm_pts_affine(
+    pts: list[tuple[float, float]],
+    M: np.ndarray,
+    orig_w: int,
+    orig_h: int,
+    new_w: int,
+    new_h: int,
+) -> list[tuple[float, float]]:
+    """Map normalized corners on original image to normalized coords on rotated canvas."""
+    out: list[tuple[float, float]] = []
+    for nx, ny in pts:
+        x = nx * orig_w
+        y = ny * orig_h
+        xp = M[0, 0] * x + M[0, 1] * y + M[0, 2]
+        yp = M[1, 0] * x + M[1, 1] * y + M[1, 2]
+        out.append(
+            (
+                min(max(xp / new_w, 0.0), 1.0),
+                min(max(yp / new_h, 0.0), 1.0),
+            )
+        )
+    return out
 
 
 def parse_obb_line(line: str) -> list[tuple[str, list[tuple[float, float]]]]:
@@ -73,12 +91,6 @@ def parse_obb_line(line: str) -> list[tuple[str, list[tuple[float, float]]]]:
     return [(cid, pts)]
 
 
-def transform_pts(
-    pts: list[tuple[float, float]], angle: int, w: int, h: int
-) -> list[tuple[float, float]]:
-    return [transform_norm_xy(x, y, angle, w, h) for x, y in pts]
-
-
 def write_obb_label(path: Path, boxes: list[tuple[str, list[tuple[float, float]]]]):
     """boxes = [(class_id, [(x,y), (x,y), (x,y), (x,y)]), ...]"""
     lines = []
@@ -89,11 +101,24 @@ def write_obb_label(path: Path, boxes: list[tuple[str, list[tuple[float, float]]
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Rotate OBB dataset (image + labels) by 90/180/270°.")
+    ap = argparse.ArgumentParser(
+        description="Rotate OBB dataset (image + labels); expanded canvas + affine labels."
+    )
     ap.add_argument("dataset", help="Path to dataset root (has images/train, labels/train, etc.)")
     ap.add_argument("--out", "-o", required=True, help="Output dataset root (will create)")
-    ap.add_argument("--angles", nargs="+", type=int, default=[90, 180, 270],
-                    help="Angles to add (default: 90 180 270)")
+    ap.add_argument(
+        "--step",
+        type=int,
+        default=30,
+        help="When --angles is omitted: rotate at step, 2*step, …, 360-step (default: 30 → 11 copies + original = 12)",
+    )
+    ap.add_argument(
+        "--angles",
+        nargs="+",
+        type=float,
+        default=None,
+        help="Explicit clockwise angles in degrees (e.g. 90 180 270). Overrides --step.",
+    )
     args = ap.parse_args()
 
     src = Path(args.dataset)
@@ -102,9 +127,20 @@ def main():
         print(f"Error: not a directory: {src}")
         return 1
 
-    for angle in args.angles:
-        if angle not in ALLOWED_ANGLES:
-            print(f"Error: angle must be one of {sorted(ALLOWED_ANGLES)}, got {angle}")
+    if args.angles is not None:
+        angles = args.angles
+    else:
+        if args.step <= 0 or args.step >= 360:
+            print("Error: --step must be between 1 and 359")
+            return 1
+        angles = list(range(args.step, 360, args.step))
+
+    for angle in angles:
+        if angle == 0 or angle >= 360 or angle <= -360:
+            print(f"Error: each angle must be non-zero and within one turn; got {angle}")
+            return 1
+        if angle < 0:
+            print(f"Error: use positive clockwise angles (got {angle})")
             return 1
 
     for split in ("train", "val"):
@@ -146,17 +182,22 @@ def main():
 
             h, w = img.shape[:2]
 
-            for angle in args.angles:
-                if angle == 90 or angle == 270:
-                    img_rot = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE if angle == 90 else cv2.ROTATE_90_COUNTERCLOCKWISE)
-                else:
-                    img_rot = cv2.rotate(img, cv2.ROTATE_180)
-                suffix = f"_rot{angle}"
+            for angle in angles:
+                img_rot, M, nw, nh, ow, oh = rotate_expand_clockwise(img, float(angle))
+                deg_int = int(round(angle))
+                is_whole = abs(float(angle) - float(deg_int)) < 1e-6
+                suffix = f"_rot{deg_int}" if is_whole else f"_rot{angle:g}".replace(".", "p")
                 out_stem = stem + suffix
                 out_img = img_dir_dst / f"{out_stem}{img_path.suffix}"
                 cv2.imwrite(str(out_img), img_rot)
 
-                boxes_rot = [(cid, transform_pts(pts, angle, w, h)) for cid, pts in boxes_orig]
+                boxes_rot = [
+                    (
+                        cid,
+                        transform_norm_pts_affine(pts, M, ow, oh, nw, nh),
+                    )
+                    for cid, pts in boxes_orig
+                ]
                 write_obb_label(lbl_dir_dst / f"{out_stem}.txt", boxes_rot)
 
     # data.yaml
@@ -169,8 +210,9 @@ names:
   0: label
 """, encoding="utf-8")
 
-    print(f"Done. Original + rotated copies written to {dst}")
-    print(f"Train: list({dst / 'images' / 'train'} with ..._rot90, _rot180, _rot270)")
+    n_variants = 1 + len(angles)
+    print(f"Done. Original + {len(angles)} rotated copies per image ({n_variants} variants) -> {dst}")
+    print(f"Angles (deg clockwise): {angles}")
     print(f"Then (from yolo-obb-service): ./train.sh {dst}/data.yaml")
 
 
